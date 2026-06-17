@@ -17,5 +17,7 @@ def settings() -> Settings:
         jwt_signing_key='test-signing-key',
         port=8000,
         github_mcp_binary='github-mcp-server',
-        allowed_github_org=None,
+        allowed_github_org='tutorcruncher',
+        allow_ungated=False,
+        allowed_redirect_uris=['https://claude.ai/api/mcp/auth_callback'],
     )

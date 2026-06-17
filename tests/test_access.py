@@ -63,6 +63,33 @@ async def test_membership_is_cached():
         mock_check.assert_awaited_once()
 
 
+async def test_cache_keyed_by_hash_not_raw_token():
+    """The raw token is never stored as a cache key."""
+    mw = OrgMembershipMiddleware('tutorcruncher')
+    with patch.object(mw, '_check_github', AsyncMock(return_value=True)):
+        await mw._is_member('gho_secret')
+    assert 'gho_secret' not in mw._cache
+    assert all('gho_secret' not in key for key in mw._cache)
+
+
+async def test_cache_is_bounded():
+    """The cache never grows past max_cache entries."""
+    mw = OrgMembershipMiddleware('tutorcruncher', max_cache=8)
+    with patch.object(mw, '_check_github', AsyncMock(return_value=True)):
+        for i in range(100):
+            await mw._is_member(f'gho_{i}')
+    assert len(mw._cache) <= 8
+
+
+async def test_expired_entries_are_purged():
+    """Entries past their TTL are dropped, not retained forever."""
+    mw = OrgMembershipMiddleware('tutorcruncher', cache_ttl=0.0)
+    with patch.object(mw, '_check_github', AsyncMock(return_value=True)):
+        await mw._is_member('gho_a')
+        await mw._is_member('gho_b')
+    assert len(mw._cache) <= 1
+
+
 async def test_on_call_tool_denies_non_member():
     """Tool calls from non-members raise ToolError and never reach the backend."""
     from fastmcp.exceptions import ToolError

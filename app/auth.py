@@ -29,4 +29,5 @@ def build_auth(settings: Settings) -> GitHubProvider:
         base_url=settings.base_url,
         required_scopes=settings.github_scopes,
         jwt_signing_key=settings.jwt_signing_key,
+        allowed_client_redirect_uris=settings.allowed_redirect_uris,
     )

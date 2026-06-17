@@ -16,6 +16,8 @@ def test_load_settings_reads_environment(monkeypatch):
     monkeypatch.setenv('PORT', '1234')
     monkeypatch.setenv('GITHUB_MCP_BINARY', '/bin/ghmcp')
     monkeypatch.setenv('ALLOWED_GITHUB_ORG', 'tutorcruncher')
+    monkeypatch.setenv('ALLOW_UNGATED', '1')
+    monkeypatch.setenv('ALLOWED_REDIRECT_URIS', 'https://claude.ai/api/mcp/auth_callback https://example.test/cb')
 
     settings = load_settings()
 
@@ -31,6 +33,25 @@ def test_load_settings_reads_environment(monkeypatch):
     assert settings.github_mcp_binary == '/bin/ghmcp'
     assert settings.backend_port == 9000
     assert settings.allowed_github_org == 'tutorcruncher'
+    assert settings.allow_ungated is True
+    assert settings.allowed_redirect_uris == [
+        'https://claude.ai/api/mcp/auth_callback',
+        'https://example.test/cb',
+    ]
+
+
+def test_defaults_fail_closed(monkeypatch):
+    """ALLOWED_GITHUB_ORG/ALLOW_UNGATED default to a gated, fail-closed posture."""
+    for var in ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET', 'BASE_URL', 'JWT_SIGNING_KEY'):
+        monkeypatch.setenv(var, 'x')
+    for var in ('ALLOWED_GITHUB_ORG', 'ALLOW_UNGATED', 'ALLOWED_REDIRECT_URIS'):
+        monkeypatch.delenv(var, raising=False)
+
+    settings = load_settings()
+
+    assert settings.allowed_github_org is None
+    assert settings.allow_ungated is False
+    assert settings.allowed_redirect_uris == ['https://claude.ai/api/mcp/auth_callback']
 
 
 def test_load_settings_missing_required_raises(monkeypatch):

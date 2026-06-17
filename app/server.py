@@ -35,6 +35,12 @@ def build_server(settings: Settings) -> FastMCPProxy:
     Returns:
         FastMCPProxy: Server that authenticates users and proxies github-mcp-server.
     """
+    if not settings.allowed_github_org and not settings.allow_ungated:
+        raise RuntimeError(
+            'No access gate configured: set ALLOWED_GITHUB_ORG to restrict access to an '
+            'org, or set ALLOW_UNGATED=1 to explicitly allow any authenticated GitHub user. '
+            'Refusing to start ungated by default.'
+        )
     server = FastMCPProxy(
         client_factory=build_client_factory(settings),
         auth=build_auth(settings),

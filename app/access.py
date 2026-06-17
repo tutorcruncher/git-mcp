@@ -6,6 +6,7 @@ the tools so that only *active members* of a configured GitHub org may list or
 call them, checked against the GitHub API using the user's own token.
 """
 
+import hashlib
 import logging
 import time
 from collections.abc import Sequence
@@ -24,15 +25,23 @@ class OrgMembershipMiddleware(Middleware):
     """Allow tool access only to active members of a GitHub organization.
 
     Membership is checked via ``GET /user/memberships/orgs/{org}`` with the
-    connecting user's token (requires the ``read:org`` scope) and cached per
-    token for a short TTL to avoid an API call on every request.
+    connecting user's token (requires the ``read:org`` scope) and cached for a
+    short TTL to avoid an API call on every request. The cache is keyed by a
+    hash of the token (never the token itself) and is bounded in size with
+    expired entries purged, so it can't grow without limit or retain raw tokens.
     """
 
-    def __init__(self, org: str, cache_ttl: float = 300.0, timeout: float = 10.0) -> None:
+    def __init__(self, org: str, cache_ttl: float = 300.0, timeout: float = 10.0, max_cache: int = 1024) -> None:
         self.org = org
         self.cache_ttl = cache_ttl
         self.timeout = timeout
+        self.max_cache = max_cache
         self._cache: dict[str, tuple[float, bool]] = {}
+
+    @staticmethod
+    def _key(token: str) -> str:
+        """Return a non-reversible cache key for a token."""
+        return hashlib.sha256(token.encode()).hexdigest()
 
     async def _check_github(self, token: str) -> bool:
         """Return whether the token's user is an active member of the org."""
@@ -50,14 +59,25 @@ class OrgMembershipMiddleware(Middleware):
         logger.info('org membership check org=%s status=%s state=%s', self.org, response.status_code, state)
         return state == 'active'
 
+    def _purge_expired(self, now: float) -> None:
+        """Drop expired entries; if still over capacity, drop the soonest-expiring."""
+        expired = [key for key, (expiry, _) in self._cache.items() if expiry <= now]
+        for key in expired:
+            del self._cache[key]
+        if len(self._cache) >= self.max_cache:
+            for key in sorted(self._cache, key=lambda k: self._cache[k][0])[: len(self._cache) - self.max_cache + 1]:
+                del self._cache[key]
+
     async def _is_member(self, token: str) -> bool:
         """Return cached membership for the token, refreshing past the TTL."""
         now = time.monotonic()
-        cached = self._cache.get(token)
+        key = self._key(token)
+        cached = self._cache.get(key)
         if cached is not None and cached[0] > now:
             return cached[1]
         allowed = await self._check_github(token)
-        self._cache[token] = (now + self.cache_ttl, allowed)
+        self._purge_expired(now)
+        self._cache[key] = (now + self.cache_ttl, allowed)
         return allowed
 
     async def _allowed(self) -> bool:
