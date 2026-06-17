@@ -16,6 +16,7 @@ from collections.abc import Callable, Iterator
 
 from fastmcp.server.providers.proxy import FastMCPProxy
 
+from app.access import OrgMembershipMiddleware
 from app.auth import build_auth
 from app.backend import build_client_factory
 from app.config import Settings, load_settings
@@ -24,17 +25,23 @@ from app.config import Settings, load_settings
 def build_server(settings: Settings) -> FastMCPProxy:
     """Build the auth-enabled proxy server.
 
+    When ``allowed_github_org`` is set, tool access is gated to active members
+    of that GitHub organization.
+
     Args:
         settings: Runtime settings.
 
     Returns:
         FastMCPProxy: Server that authenticates users and proxies github-mcp-server.
     """
-    return FastMCPProxy(
+    server = FastMCPProxy(
         client_factory=build_client_factory(settings),
         auth=build_auth(settings),
         name='GitHubProxy',
     )
+    if settings.allowed_github_org:
+        server.add_middleware(OrgMembershipMiddleware(settings.allowed_github_org))
+    return server
 
 
 def _wait_for_port(host: str, port: int, timeout: float = 30.0) -> None:

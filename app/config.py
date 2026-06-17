@@ -27,6 +27,8 @@ class Settings:
         jwt_signing_key: Signing key for FastMCP-issued JWTs.
         port: Port the MCP server binds to.
         github_mcp_binary: Path/name of the github-mcp-server executable.
+        allowed_github_org: If set, only active members of this GitHub org may
+            use the tools. When unset, no membership gate is enforced.
     """
 
     github_client_id: str
@@ -39,6 +41,7 @@ class Settings:
     jwt_signing_key: str
     port: int
     github_mcp_binary: str
+    allowed_github_org: str | None
 
     @property
     def backend_port(self) -> int:
@@ -62,4 +65,5 @@ def load_settings() -> Settings:
         jwt_signing_key=_require('JWT_SIGNING_KEY'),
         port=int(os.environ.get('PORT', '8000')),
         github_mcp_binary=os.environ.get('GITHUB_MCP_BINARY', 'github-mcp-server'),
+        allowed_github_org=os.environ.get('ALLOWED_GITHUB_ORG') or None,
     )

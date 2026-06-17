@@ -15,6 +15,7 @@ def test_load_settings_reads_environment(monkeypatch):
     monkeypatch.setenv('JWT_SIGNING_KEY', 'k')
     monkeypatch.setenv('PORT', '1234')
     monkeypatch.setenv('GITHUB_MCP_BINARY', '/bin/ghmcp')
+    monkeypatch.setenv('ALLOWED_GITHUB_ORG', 'tutorcruncher')
 
     settings = load_settings()
 
@@ -29,6 +30,7 @@ def test_load_settings_reads_environment(monkeypatch):
     assert settings.port == 1234
     assert settings.github_mcp_binary == '/bin/ghmcp'
     assert settings.backend_port == 9000
+    assert settings.allowed_github_org == 'tutorcruncher'
 
 
 def test_load_settings_missing_required_raises(monkeypatch):
