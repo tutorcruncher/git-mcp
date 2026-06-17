@@ -7,6 +7,7 @@ on localhost; each request's client is built with the connecting user's GitHub t
 
 import contextlib
 import ctypes
+import logging
 import signal
 import socket
 import subprocess
@@ -106,6 +107,7 @@ def run_backend(settings: Settings) -> Iterator[subprocess.Popen]:
 
 def main() -> None:
     """Start the backend subprocess and run the MCP server over HTTP."""
+    logging.basicConfig(level=logging.INFO)
     settings = load_settings()
     server = build_server(settings)
     with run_backend(settings):

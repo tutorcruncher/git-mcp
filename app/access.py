@@ -6,6 +6,7 @@ the tools so that only *active members* of a configured GitHub org may list or
 call them, checked against the GitHub API using the user's own token.
 """
 
+import logging
 import time
 from collections.abc import Sequence
 
@@ -15,6 +16,8 @@ from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 
 GITHUB_API = 'https://api.github.com'
+
+logger = logging.getLogger('git_mcp.access')
 
 
 class OrgMembershipMiddleware(Middleware):
@@ -37,11 +40,15 @@ class OrgMembershipMiddleware(Middleware):
             'Authorization': f'Bearer {token}',
             'Accept': 'application/vnd.github+json',
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.get(f'{GITHUB_API}/user/memberships/orgs/{self.org}', headers=headers)
-        if response.status_code == 200:
-            return response.json().get('state') == 'active'
-        return False
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(f'{GITHUB_API}/user/memberships/orgs/{self.org}', headers=headers)
+        except httpx.HTTPError as exc:
+            logger.warning('org membership check failed for org=%s: %s', self.org, exc)
+            return False
+        state = response.json().get('state') if response.status_code == 200 else None
+        logger.info('org membership check org=%s status=%s state=%s', self.org, response.status_code, state)
+        return state == 'active'
 
     async def _is_member(self, token: str) -> bool:
         """Return cached membership for the token, refreshing past the TTL."""
@@ -57,8 +64,12 @@ class OrgMembershipMiddleware(Middleware):
         """Return whether the current request's user may use the tools."""
         access = get_access_token()
         if access is None:
+            logger.info('access check: no authenticated token in request context')
             return False
-        return await self._is_member(access.token)
+        login = access.claims.get('login') if access.claims else None
+        allowed = await self._is_member(access.token)
+        logger.info('access check login=%s org=%s allowed=%s', login, self.org, allowed)
+        return allowed
 
     async def on_call_tool(self, context: MiddlewareContext, call_next: CallNext):
         """Reject tool calls from users who are not active org members."""
@@ -70,4 +81,6 @@ class OrgMembershipMiddleware(Middleware):
         """Hide the tool list entirely from users who are not org members."""
         if not await self._allowed():
             return []
-        return await call_next(context)
+        tools = await call_next(context)
+        logger.info('list_tools returning %d tools', len(list(tools)))
+        return tools
