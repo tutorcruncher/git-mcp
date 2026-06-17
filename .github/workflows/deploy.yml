@@ -20,7 +20,7 @@ jobs:
       HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
       HEROKU_APP: git-mcp
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
