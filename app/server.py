@@ -1,0 +1,90 @@
+"""Entry point: build the auth-enabled FastMCP proxy and run it.
+
+A single FastMCPProxy both enforces GitHub OAuth (via GitHubProvider) and proxies
+the official github-mcp-server. The backend runs in `http` mode as a child process
+on localhost; each request's client is built with the connecting user's GitHub token.
+"""
+
+import contextlib
+import socket
+import subprocess
+import time
+from collections.abc import Iterator
+
+from fastmcp.server.providers.proxy import FastMCPProxy
+
+from app.auth import build_auth
+from app.backend import build_client_factory
+from app.config import Settings, load_settings
+
+
+def build_server(settings: Settings) -> FastMCPProxy:
+    """Build the auth-enabled proxy server.
+
+    Args:
+        settings: Runtime settings.
+
+    Returns:
+        FastMCPProxy: Server that authenticates users and proxies github-mcp-server.
+    """
+    return FastMCPProxy(
+        client_factory=build_client_factory(settings),
+        auth=build_auth(settings),
+        name='GitHubProxy',
+    )
+
+
+def _wait_for_port(host: str, port: int, timeout: float = 30.0) -> None:
+    """Block until a TCP port accepts connections or the timeout elapses."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(1.0)
+            if sock.connect_ex((host, port)) == 0:
+                return
+        time.sleep(0.25)
+    raise TimeoutError(f'Backend github-mcp-server did not start on {host}:{port}')
+
+
+@contextlib.contextmanager
+def run_backend(settings: Settings) -> Iterator[subprocess.Popen]:
+    """Start github-mcp-server in http mode for the lifetime of the context.
+
+    No global token is passed — each proxied request carries its own bearer token.
+
+    Args:
+        settings: Runtime settings holding the binary path and backend port.
+
+    Yields:
+        The running backend process.
+    """
+    port = settings.backend_port
+    process = subprocess.Popen(
+        [
+            settings.github_mcp_binary,
+            'http',
+            '--listen-host',
+            '127.0.0.1',
+            '--port',
+            str(port),
+        ]
+    )
+    try:
+        _wait_for_port('127.0.0.1', port)
+        yield process
+    finally:
+        process.terminate()
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            process.wait(timeout=10)
+
+
+def main() -> None:
+    """Start the backend subprocess and run the MCP server over HTTP."""
+    settings = load_settings()
+    server = build_server(settings)
+    with run_backend(settings):
+        server.run(transport='http', host='0.0.0.0', port=settings.port)
+
+
+if __name__ == '__main__':
+    main()
