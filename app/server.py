@@ -6,10 +6,13 @@ on localhost; each request's client is built with the connecting user's GitHub t
 """
 
 import contextlib
+import ctypes
+import signal
 import socket
 import subprocess
+import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 from fastmcp.server.providers.proxy import FastMCPProxy
 
@@ -46,6 +49,23 @@ def _wait_for_port(host: str, port: int, timeout: float = 30.0) -> None:
     raise TimeoutError(f'Backend github-mcp-server did not start on {host}:{port}')
 
 
+def _linux_die_with_parent() -> Callable[[], None] | None:
+    """Return a preexec_fn that asks the kernel to SIGTERM the child if we die.
+
+    Uses Linux prctl(PR_SET_PDEATHSIG). uvicorn's signal handling can bypass our
+    cleanup ``finally`` on SIGTERM (e.g. a Heroku dyno restart), which would orphan
+    the backend; this guarantees the kernel reaps it. No-op on non-Linux platforms.
+    """
+    if not sys.platform.startswith('linux'):
+        return None
+
+    def preexec() -> None:
+        pr_set_pdeathsig = 1
+        ctypes.CDLL('libc.so.6', use_errno=True).prctl(pr_set_pdeathsig, signal.SIGTERM)
+
+    return preexec
+
+
 @contextlib.contextmanager
 def run_backend(settings: Settings) -> Iterator[subprocess.Popen]:
     """Start github-mcp-server in http mode for the lifetime of the context.
@@ -63,11 +83,10 @@ def run_backend(settings: Settings) -> Iterator[subprocess.Popen]:
         [
             settings.github_mcp_binary,
             'http',
-            '--listen-host',
-            '127.0.0.1',
             '--port',
             str(port),
-        ]
+        ],
+        preexec_fn=_linux_die_with_parent(),
     )
     try:
         _wait_for_port('127.0.0.1', port)
