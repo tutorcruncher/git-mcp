@@ -58,6 +58,13 @@ def build_client_factory(settings: Settings) -> Callable[[], ProxyClient]:
             toolsets=settings.github_toolsets,
             read_only=settings.read_only,
         )
-        return ProxyClient(StreamableHttpTransport(url=settings.backend_mcp_url, headers=headers))
+        client = ProxyClient(StreamableHttpTransport(url=settings.backend_mcp_url, headers=headers))
+        # ProxyClient forwards the inbound request's headers to the backend by
+        # default. That leaks Claude's own Authorization (the FastMCP-issued JWT)
+        # and session headers to github-mcp-server, which rejects them with 400.
+        # Disable forwarding so only our injected GitHub token + toolset headers
+        # reach the backend.
+        client.transport.forward_incoming_headers = False
+        return client
 
     return make_backend_client

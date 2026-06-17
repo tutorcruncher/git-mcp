@@ -49,6 +49,16 @@ def test_factory_injects_request_user_token(mock_get_token, settings):
 
 
 @patch('app.backend.get_access_token')
+def test_factory_disables_header_forwarding(mock_get_token, settings):
+    """The backend client must not forward Claude's inbound headers to github-mcp-server."""
+    mock_get_token.return_value = FakeToken(token='gho_user1')
+
+    client = build_client_factory(settings)()
+
+    assert client.transport.forward_incoming_headers is False
+
+
+@patch('app.backend.get_access_token')
 def test_factory_is_per_user(mock_get_token, settings):
     """Two requests with different tokens yield clients with different bearers."""
     factory = build_client_factory(settings)
