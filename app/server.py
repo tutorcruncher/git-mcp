@@ -21,6 +21,7 @@ from app.access import OrgMembershipMiddleware
 from app.auth import build_auth
 from app.backend import build_client_factory
 from app.config import Settings, load_settings
+from app.observability import ObservabilityMiddleware, configure_observability
 
 
 def build_server(settings: Settings) -> FastMCPProxy:
@@ -48,6 +49,7 @@ def build_server(settings: Settings) -> FastMCPProxy:
     )
     if settings.allowed_github_org:
         server.add_middleware(OrgMembershipMiddleware(settings.allowed_github_org))
+    server.add_middleware(ObservabilityMiddleware())
     return server
 
 
@@ -114,6 +116,7 @@ def run_backend(settings: Settings) -> Iterator[subprocess.Popen]:
 def main() -> None:
     """Start the backend subprocess and run the MCP server over HTTP."""
     logging.basicConfig(level=logging.INFO)
+    configure_observability()
     settings = load_settings()
     server = build_server(settings)
     with run_backend(settings):
