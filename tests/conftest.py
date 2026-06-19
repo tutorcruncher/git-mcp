@@ -20,4 +20,5 @@ def settings() -> Settings:
         allowed_github_org='tutorcruncher',
         allow_ungated=False,
         allowed_redirect_uris=['https://claude.ai/api/mcp/auth_callback'],
+        redis_url=None,
     )

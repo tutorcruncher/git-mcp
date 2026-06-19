@@ -7,6 +7,7 @@ dependencies = [
     "fastmcp>=3.4.2,<4",
     "httpx>=0.28",
     "logfire[httpx]>=4.37.0",
+    "py-key-value-aio[redis]>=0.4.5",
 ]
 
 [dependency-groups]

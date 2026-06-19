@@ -34,6 +34,10 @@ class Settings:
             ALLOWED_GITHUB_ORG fails closed rather than exposing tools to all.
         allowed_redirect_uris: OAuth client redirect URIs permitted during
             dynamic client registration / authorization.
+        redis_url: Redis connection URL for persisting OAuth state across restarts.
+            When set, OAuth client registrations and tokens survive process restarts
+            (essential on hosts with an ephemeral filesystem, e.g. Heroku dyno
+            cycling). When unset, FastMCP falls back to its default on-disk store.
     """
 
     github_client_id: str
@@ -49,6 +53,7 @@ class Settings:
     allowed_github_org: str | None
     allow_ungated: bool
     allowed_redirect_uris: list[str]
+    redis_url: str | None
 
     @property
     def backend_port(self) -> int:
@@ -77,4 +82,5 @@ def load_settings() -> Settings:
         allowed_redirect_uris=os.environ.get(
             'ALLOWED_REDIRECT_URIS', 'https://claude.ai/api/mcp/auth_callback'
         ).split(),
+        redis_url=os.environ.get('REDIS_URL') or None,
     )

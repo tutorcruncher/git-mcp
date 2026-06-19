@@ -82,6 +82,13 @@ heroku config:set -a your-app \
 git push heroku main
 ```
 
+Provision Redis so OAuth state survives Heroku's daily dyno cycling — without it every
+connected client must re-authenticate each day. The add-on sets `REDIS_URL` automatically:
+
+```bash
+heroku addons:create heroku-redis:mini -a your-app
+```
+
 `BASE_URL` and the OAuth App callback (`<BASE_URL>/auth/callback`) must match the
 deployed URL exactly.
 
