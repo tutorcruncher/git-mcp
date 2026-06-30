@@ -98,6 +98,23 @@ Add `https://your-app.herokuapp.com/mcp` as a **custom connector** (Streamable H
 Claude runs the OAuth flow; after you authorize the GitHub OAuth App, the GitHub tools
 become available, acting as your GitHub user.
 
+## Authentication
+
+OAuth and key-based auth are independent and can run **together** on one deployment:
+
+- **GitHub OAuth** (set the OAuth App credentials + a gate via `ALLOWED_GITHUB_ORG`
+  or `ALLOW_UNGATED=1`) — for interactive clients like Claude Desktop / claude.ai.
+  Each user acts as themselves via their own GitHub token.
+- **Key-based** (set `MCP_API_KEYS` + `GITHUB_BACKEND_TOKEN`) — for a headless
+  app/agent. Clients send `Authorization: Bearer <key>` and act as the configured
+  backend PAT; a valid key is its own gate (no org check).
+- **Both** — the server serves the OAuth flow *and* accepts the static keys, so a
+  Claude Desktop connector and a built app can use the same URL at once. Key
+  requests are tagged internally so they forward the backend PAT and skip the org
+  gate, while OAuth requests forward the user's token and are org-gated as usual.
+
+At least one of the two must be configured or the server refuses to start.
+
 ## Pinning
 
 Keep both moving pieces pinned:

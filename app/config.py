@@ -38,13 +38,14 @@ class Settings:
             When set, OAuth client registrations and tokens survive process restarts
             (essential on hosts with an ephemeral filesystem, e.g. Heroku dyno
             cycling). When unset, FastMCP falls back to its default on-disk store.
-        mcp_api_keys: Static API keys for key-based auth. When non-empty, the server
-            authenticates clients by a Bearer key instead of GitHub OAuth, and the
-            GitHub OAuth credentials / org gating are not used (a valid key is the
-            gate). When empty, the server falls back to GitHub OAuth + org gating.
+        mcp_api_keys: Static API keys for key-based auth. When non-empty, clients may
+            authenticate with a static Bearer key. This is accepted *alongside* GitHub
+            OAuth when the OAuth credentials are also set (dual auth), or on its own
+            when they are not. A valid key is its own gate (no org membership check).
         github_backend_token: Static GitHub token (PAT) the proxy forwards to the
-            backend github-mcp-server in key-auth mode (there is no per-user OAuth
-            token then). Required when mcp_api_keys is set; ignored in OAuth mode.
+            backend github-mcp-server for key-authenticated requests (there is no
+            per-user OAuth token then). Required when mcp_api_keys is set; not used for
+            OAuth-authenticated requests, which forward the user's own token.
     """
 
     github_client_id: str
@@ -66,8 +67,16 @@ class Settings:
 
     @property
     def key_auth_enabled(self) -> bool:
-        """True when static API-key auth is configured (takes precedence over OAuth)."""
+        """True when static API-key auth is configured (accepted alongside OAuth)."""
         return bool(self.mcp_api_keys)
+
+    @property
+    def oauth_enabled(self) -> bool:
+        """True when the GitHub OAuth credentials are present, so the OAuth flow is served.
+
+        Independent of ``key_auth_enabled``: both can be true at once (dual auth).
+        """
+        return bool(self.github_client_id and self.github_client_secret and self.base_url and self.jwt_signing_key)
 
     @property
     def backend_port(self) -> int:

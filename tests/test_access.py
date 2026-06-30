@@ -12,6 +12,7 @@ CONTEXT: Any = object()
 @dataclass
 class FakeToken:
     token: str
+    claims: dict | None = None
 
 
 class FakeResponse:
@@ -125,3 +126,13 @@ async def test_allowed_false_without_token():
     mw = OrgMembershipMiddleware('tutorcruncher')
     with patch('app.access.get_access_token', return_value=None):
         assert await mw._allowed() is False
+
+
+async def test_key_auth_request_bypasses_org_gate():
+    """A key-authenticated request is allowed without a GitHub membership check."""
+    mw = OrgMembershipMiddleware('tutorcruncher')
+    key_token = FakeToken(token='k', claims={'auth_mode': 'key', 'client_id': 'api-key-1'})
+    with patch('app.access.get_access_token', return_value=key_token):
+        with patch.object(mw, '_check_github', AsyncMock()) as mock_check:
+            assert await mw._allowed() is True
+    mock_check.assert_not_awaited()
