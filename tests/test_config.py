@@ -89,5 +89,32 @@ def test_no_api_keys_means_oauth_mode(monkeypatch):
     settings = load_settings()
 
     assert settings.key_auth_enabled is False
+    assert settings.oauth_enabled is True
     assert settings.mcp_api_keys == []
     assert settings.github_backend_token is None
+
+
+def test_oauth_and_keys_coexist(monkeypatch):
+    """OAuth credentials and MCP_API_KEYS can both be set (dual auth)."""
+    for var in ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET', 'BASE_URL', 'JWT_SIGNING_KEY'):
+        monkeypatch.setenv(var, 'x')
+    monkeypatch.setenv('MCP_API_KEYS', 'key-one')
+    monkeypatch.setenv('GITHUB_BACKEND_TOKEN', 'ghp_backend')
+
+    settings = load_settings()
+
+    assert settings.oauth_enabled is True
+    assert settings.key_auth_enabled is True
+
+
+def test_oauth_disabled_when_credentials_incomplete(monkeypatch):
+    """oauth_enabled is false when any required OAuth credential is missing."""
+    for var in ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET', 'BASE_URL'):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv('JWT_SIGNING_KEY', 'x')
+    monkeypatch.setenv('MCP_API_KEYS', 'key-one')
+
+    settings = load_settings()
+
+    assert settings.oauth_enabled is False
+    assert settings.key_auth_enabled is True

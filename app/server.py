@@ -36,20 +36,27 @@ def build_server(settings: Settings) -> FastMCPProxy:
     Returns:
         FastMCPProxy: Server that authenticates users and proxies github-mcp-server.
     """
-    if not settings.key_auth_enabled and not settings.allowed_github_org and not settings.allow_ungated:
+    if not settings.oauth_enabled and not settings.mcp_api_keys:
         raise RuntimeError(
-            'No access gate configured: set MCP_API_KEYS for key-based auth, set '
-            'ALLOWED_GITHUB_ORG to restrict OAuth access to an org, or set ALLOW_UNGATED=1 '
-            'to explicitly allow any authenticated GitHub user. Refusing to start ungated by default.'
+            'No auth configured: set the GitHub OAuth credentials (GITHUB_OAUTH_CLIENT_ID, '
+            'GITHUB_OAUTH_CLIENT_SECRET, BASE_URL, JWT_SIGNING_KEY) for OAuth, and/or set '
+            'MCP_API_KEYS for key-based auth.'
+        )
+    if settings.oauth_enabled and not settings.allowed_github_org and not settings.allow_ungated:
+        raise RuntimeError(
+            'No access gate configured for OAuth users: set ALLOWED_GITHUB_ORG to restrict '
+            'OAuth access to an org, or set ALLOW_UNGATED=1 to explicitly allow any authenticated '
+            'GitHub user. Refusing to start ungated by default.'
         )
     server = FastMCPProxy(
         client_factory=build_client_factory(settings),
         auth=build_auth(settings),
         name='GitHubProxy',
     )
-    # Org-membership gating only applies to OAuth (it needs the user's GitHub token);
-    # in key-auth mode the key itself is the gate.
-    if not settings.key_auth_enabled and settings.allowed_github_org:
+    # Org-membership gating applies to OAuth users (it needs the user's GitHub token);
+    # key-authenticated requests carry no GitHub identity and bypass it inside the
+    # middleware, the key itself being their gate.
+    if settings.oauth_enabled and settings.allowed_github_org:
         server.add_middleware(OrgMembershipMiddleware(settings.allowed_github_org))
     server.add_middleware(ObservabilityMiddleware())
     return server

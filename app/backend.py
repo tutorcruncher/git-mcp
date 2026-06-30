@@ -12,6 +12,7 @@ from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.providers.proxy import ProxyClient
 
+from app.auth import AUTH_MODE_CLAIM, KEY_AUTH_MODE
 from app.config import Settings
 
 
@@ -51,19 +52,21 @@ def build_client_factory(settings: Settings) -> Callable[[], ProxyClient]:
     def make_backend_client() -> ProxyClient:
         """Build a backend client bound to the GitHub token for this request.
 
-        In OAuth mode the token is the connecting user's GitHub token. In key-auth
-        mode there is no per-user token, so a configured static GitHub PAT
-        (``GITHUB_BACKEND_TOKEN``) is used — it determines what GitHub the proxied
-        tools can see.
+        The token source is decided per request from how the caller authenticated:
+        a key-authenticated request (tagged ``auth_mode='key'``) has no per-user
+        token, so a configured static GitHub PAT (``GITHUB_BACKEND_TOKEN``) is used;
+        an OAuth-authenticated request forwards the connecting user's own GitHub
+        token. This lets key and OAuth clients share one deployment.
         """
-        if settings.key_auth_enabled:
+        access_token = get_access_token()
+        if access_token is None:
+            raise PermissionError('No authenticated GitHub token in request context')
+        is_key_auth = bool(access_token.claims) and access_token.claims.get(AUTH_MODE_CLAIM) == KEY_AUTH_MODE
+        if is_key_auth:
             if not settings.github_backend_token:
                 raise PermissionError('Key-auth mode requires GITHUB_BACKEND_TOKEN (a GitHub PAT) for the backend.')
             github_token = settings.github_backend_token
         else:
-            access_token = get_access_token()
-            if access_token is None:
-                raise PermissionError('No authenticated GitHub token in request context')
             github_token = access_token.token
         headers = build_backend_headers(
             token=github_token,
