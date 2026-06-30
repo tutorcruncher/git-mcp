@@ -63,3 +63,31 @@ def test_load_settings_missing_required_raises(monkeypatch):
 
     with pytest.raises(RuntimeError, match='GITHUB_OAUTH_CLIENT_ID'):
         load_settings()
+
+
+def test_key_auth_parses_keys_and_skips_oauth_requirements(monkeypatch):
+    """With MCP_API_KEYS set, keys are parsed and the GitHub OAuth vars aren't required."""
+    for name in ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET', 'BASE_URL', 'JWT_SIGNING_KEY'):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('MCP_API_KEYS', 'key-one, key-two key-three')
+    monkeypatch.setenv('GITHUB_BACKEND_TOKEN', 'ghp_backend')
+
+    settings = load_settings()
+
+    assert settings.key_auth_enabled is True
+    assert settings.mcp_api_keys == ['key-one', 'key-two', 'key-three']
+    assert settings.github_backend_token == 'ghp_backend'
+    assert settings.github_client_id == ''  # not required in key mode
+
+
+def test_no_api_keys_means_oauth_mode(monkeypatch):
+    """Without MCP_API_KEYS the server stays in OAuth mode (keys empty)."""
+    for var in ('GITHUB_OAUTH_CLIENT_ID', 'GITHUB_OAUTH_CLIENT_SECRET', 'BASE_URL', 'JWT_SIGNING_KEY'):
+        monkeypatch.setenv(var, 'x')
+    monkeypatch.delenv('MCP_API_KEYS', raising=False)
+
+    settings = load_settings()
+
+    assert settings.key_auth_enabled is False
+    assert settings.mcp_api_keys == []
+    assert settings.github_backend_token is None

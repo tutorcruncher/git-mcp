@@ -36,18 +36,20 @@ def build_server(settings: Settings) -> FastMCPProxy:
     Returns:
         FastMCPProxy: Server that authenticates users and proxies github-mcp-server.
     """
-    if not settings.allowed_github_org and not settings.allow_ungated:
+    if not settings.key_auth_enabled and not settings.allowed_github_org and not settings.allow_ungated:
         raise RuntimeError(
-            'No access gate configured: set ALLOWED_GITHUB_ORG to restrict access to an '
-            'org, or set ALLOW_UNGATED=1 to explicitly allow any authenticated GitHub user. '
-            'Refusing to start ungated by default.'
+            'No access gate configured: set MCP_API_KEYS for key-based auth, set '
+            'ALLOWED_GITHUB_ORG to restrict OAuth access to an org, or set ALLOW_UNGATED=1 '
+            'to explicitly allow any authenticated GitHub user. Refusing to start ungated by default.'
         )
     server = FastMCPProxy(
         client_factory=build_client_factory(settings),
         auth=build_auth(settings),
         name='GitHubProxy',
     )
-    if settings.allowed_github_org:
+    # Org-membership gating only applies to OAuth (it needs the user's GitHub token);
+    # in key-auth mode the key itself is the gate.
+    if not settings.key_auth_enabled and settings.allowed_github_org:
         server.add_middleware(OrgMembershipMiddleware(settings.allowed_github_org))
     server.add_middleware(ObservabilityMiddleware())
     return server
