@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass
 from unittest.mock import patch
 
@@ -79,3 +80,21 @@ def test_factory_without_token_raises(mock_get_token, settings):
 
     with pytest.raises(PermissionError):
         build_client_factory(settings)()
+
+
+def test_factory_uses_backend_pat_in_key_mode(settings):
+    """In key-auth mode the factory injects the static backend PAT, not a user token."""
+    key_settings = dataclasses.replace(settings, mcp_api_keys=['k'], github_backend_token='ghp_backend')
+
+    client = build_client_factory(key_settings)()
+
+    assert client.transport.headers['Authorization'] == 'Bearer ghp_backend'
+    assert client.transport.forward_incoming_headers is False
+
+
+def test_factory_key_mode_requires_backend_token(settings):
+    """Key-auth mode with no GITHUB_BACKEND_TOKEN fails with a clear error."""
+    key_settings = dataclasses.replace(settings, mcp_api_keys=['k'], github_backend_token=None)
+
+    with pytest.raises(PermissionError, match='GITHUB_BACKEND_TOKEN'):
+        build_client_factory(key_settings)()

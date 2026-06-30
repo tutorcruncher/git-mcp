@@ -1,7 +1,7 @@
 """Environment-backed configuration for the GitHub MCP proxy server."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 def _require(name: str) -> str:
@@ -38,6 +38,13 @@ class Settings:
             When set, OAuth client registrations and tokens survive process restarts
             (essential on hosts with an ephemeral filesystem, e.g. Heroku dyno
             cycling). When unset, FastMCP falls back to its default on-disk store.
+        mcp_api_keys: Static API keys for key-based auth. When non-empty, the server
+            authenticates clients by a Bearer key instead of GitHub OAuth, and the
+            GitHub OAuth credentials / org gating are not used (a valid key is the
+            gate). When empty, the server falls back to GitHub OAuth + org gating.
+        github_backend_token: Static GitHub token (PAT) the proxy forwards to the
+            backend github-mcp-server in key-auth mode (there is no per-user OAuth
+            token then). Required when mcp_api_keys is set; ignored in OAuth mode.
     """
 
     github_client_id: str
@@ -54,6 +61,13 @@ class Settings:
     allow_ungated: bool
     allowed_redirect_uris: list[str]
     redis_url: str | None
+    mcp_api_keys: list[str] = field(default_factory=list)
+    github_backend_token: str | None = None
+
+    @property
+    def key_auth_enabled(self) -> bool:
+        """True when static API-key auth is configured (takes precedence over OAuth)."""
+        return bool(self.mcp_api_keys)
 
     @property
     def backend_port(self) -> int:
@@ -64,17 +78,34 @@ class Settings:
         return parsed.port or 8082
 
 
+def _load_api_keys() -> list[str]:
+    """Parse MCP_API_KEYS (comma- or whitespace-separated) into a list of keys."""
+    return [key for key in os.environ.get('MCP_API_KEYS', '').replace(',', ' ').split() if key]
+
+
 def load_settings() -> Settings:
-    """Build a Settings instance from the current environment."""
+    """Build a Settings instance from the current environment.
+
+    In key-auth mode (``MCP_API_KEYS`` set) the GitHub OAuth credentials are not
+    required, so the server can run with just API keys + a backend GitHub token. In
+    OAuth mode they remain required and a missing one fails fast.
+    """
+    api_keys = _load_api_keys()
+    key_auth = bool(api_keys)
+
+    def _oauth_required(name: str) -> str:
+        """Required in OAuth mode; optional (default empty) in key-auth mode."""
+        return (os.environ.get(name) or '') if key_auth else _require(name)
+
     return Settings(
-        github_client_id=_require('GITHUB_OAUTH_CLIENT_ID'),
-        github_client_secret=_require('GITHUB_OAUTH_CLIENT_SECRET'),
-        base_url=_require('BASE_URL').rstrip('/'),
+        github_client_id=_oauth_required('GITHUB_OAUTH_CLIENT_ID'),
+        github_client_secret=_oauth_required('GITHUB_OAUTH_CLIENT_SECRET'),
+        base_url=_oauth_required('BASE_URL').rstrip('/'),
         github_scopes=os.environ.get('GITHUB_SCOPES', 'repo read:org read:user').split(),
         backend_mcp_url=os.environ.get('BACKEND_MCP_URL', 'http://127.0.0.1:8082/mcp'),
         github_toolsets=os.environ.get('GITHUB_TOOLSETS', 'all'),
         read_only=os.environ.get('READ_ONLY', '0') == '1',
-        jwt_signing_key=_require('JWT_SIGNING_KEY'),
+        jwt_signing_key=_oauth_required('JWT_SIGNING_KEY'),
         port=int(os.environ.get('PORT', '8000')),
         github_mcp_binary=os.environ.get('GITHUB_MCP_BINARY', 'github-mcp-server'),
         allowed_github_org=os.environ.get('ALLOWED_GITHUB_ORG') or None,
@@ -83,4 +114,6 @@ def load_settings() -> Settings:
             'ALLOWED_REDIRECT_URIS', 'https://claude.ai/api/mcp/auth_callback'
         ).split(),
         redis_url=os.environ.get('REDIS_URL') or None,
+        mcp_api_keys=api_keys,
+        github_backend_token=os.environ.get('GITHUB_BACKEND_TOKEN') or None,
     )
