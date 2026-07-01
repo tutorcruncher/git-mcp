@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
-      HEROKU_APP: git-mcp
+      HEROKU_APP: github-mcp
     steps:
       - uses: actions/checkout@v5
 
